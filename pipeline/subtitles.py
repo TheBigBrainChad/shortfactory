@@ -81,7 +81,7 @@ def format_time(seconds):
     m = int((seconds % 3600) // 60)
     s = int(seconds % 60)
     ms = int((seconds - int(seconds)) * 100)
-    return f'{h}:{m:02d}:{s:02d}.{ms:02d}'
+    return '{}:{:02d}:{:02d}.{:02d}'.format(h, m, s, ms)
 
 
 def chunk_words(words, chunk_size=4):
@@ -89,6 +89,32 @@ def chunk_words(words, chunk_size=4):
     for i in range(0, len(words), chunk_size):
         chunks.append(words[i:i + chunk_size])
     return chunks
+
+
+def build_highlight_text(chunk, highlight_word, active_hl, active_norm, blur):
+    """Build ASS text with word-by-word highlighting. Avoid f-strings with braces."""
+    parts = []
+    for w in chunk:
+        word_text = w['word']
+        if w == highlight_word:
+            # Highlighted word: {\c&H00FFE1FF&}{\blur3}word{\c&H00FFFFFF&}{\blur3}
+            tag_open = '\\c' + active_hl
+            tag_close = '\\c' + active_norm
+            if blur:
+                tag_open += '\\blur3'
+                tag_close += '\\blur3'
+            parts.append('{' + tag_open + '}' + word_text + '{' + tag_close + '}')
+        else:
+            parts.append(word_text)
+    return ' '.join(parts)
+
+
+def build_inactive_text(chunk, inactive_color):
+    """Build ASS text for inactive subtitle line."""
+    parts = []
+    for w in chunk:
+        parts.append('{\\c' + inactive_color + '}' + w['word'])
+    return ' '.join(parts)
 
 
 def main():
@@ -108,11 +134,10 @@ def main():
     if not words:
         raise ValueError('No words found in transcript')
 
-    print(f'✨ Generating subtitles ({args.style} style): {len(words)} words...', flush=True)
+    print('✨ Generating subtitles (' + args.style + ' style): ' + str(len(words)) + ' words...', flush=True)
 
     chunks = chunk_words(words, args.chunk_size)
     events = []
-    blur_tag = '{\\blur3}' if style['blur'] else ''
 
     for chunk in chunks:
         chunk_start = chunk[0]['start']
@@ -121,21 +146,19 @@ def main():
         for word in chunk:
             word_start = word['start']
             word_end = word['end']
-            highlight_text = ''
-            for w in chunk:
-                if w == word:
-                    highlight_text += f'{{\\c{style["active_highlight"]}}{blur_tag}{w["word"]}{{\\c{style["active_normal"]}}{blur_tag} '
-                else:
-                    highlight_text += f'{w["word"]} '
-
-            highlight_text = highlight_text.strip()
+            highlight_text = build_highlight_text(
+                chunk, word,
+                style['active_highlight'],
+                style['active_normal'],
+                style['blur']
+            )
             events.append(
-                f'Dialogue: 0,{format_time(word_start)},{format_time(word_end)},Active,,0,0,0,,{highlight_text}'
+                'Dialogue: 0,' + format_time(word_start) + ',' + format_time(word_end) + ',Active,,0,0,0,,' + highlight_text
             )
 
-        inactive_text = ' '.join(f'{{\\c{style["inactive_color"]}}}{w["word"]}' for w in chunk)
+        inactive_text = build_inactive_text(chunk, style['inactive_color'])
         events.append(
-            f'Dialogue: 0,{format_time(chunk_start)},{format_time(chunk_end)},Inactive,,0,0,0,,{inactive_text}'
+            'Dialogue: 0,' + format_time(chunk_start) + ',' + format_time(chunk_end) + ',Inactive,,0,0,0,,' + inactive_text
         )
 
     with open(args.output, 'w') as f:
@@ -143,7 +166,7 @@ def main():
         for event in events:
             f.write(event + '\n')
 
-    print(f'✅ Subtitles saved: {args.output} ({len(events)} events)', flush=True)
+    print('✅ Subtitles saved: ' + args.output + ' (' + str(len(events)) + ' events)', flush=True)
 
 
 if __name__ == '__main__':
