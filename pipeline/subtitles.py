@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """ShortFactory — Karaoke Subtitle Generator
 Word-by-word karaoke: active word pops yellow + 110%, rest stay white.
-Font: Montserrat 56pt bold, centered at 45% from top of 1080x1920."""
+Font: Montserrat 56pt bold, centered at 45% from top of 1080x1920.
+Subtitles are ALWAYS visible — no gaps between words or chunks."""
 
 import argparse
 import json
@@ -27,9 +28,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 YELLOW = '&H0000FFFF&'
 WHITE = '&H00FFFFFF&'
 
-# Position: center horizontally (540), 45% from top (864)
-POS_TAG = '\\an5\\pos(540,864)'
-
 
 def format_time(seconds):
     h = int(seconds // 3600)
@@ -45,15 +43,14 @@ def chunk_words(words, chunk_size=4):
 
 
 def build_karaoke_line(chunk, active_index):
-    """Build one Dialogue text line where the active word is yellow+scaled."""
-    parts = [POS_TAG]
+    """Build one Dialogue text line where the active word is yellow+scaled.
+    All override tags are wrapped in braces so libass parses them, not renders them."""
+    parts = ['{\\an5\\pos(540,864)}']
     for idx, word in enumerate(chunk):
         text = word['word']
         if idx == active_index:
-            # Active: yellow + 110% scale
             parts.append('{\\c' + YELLOW + '\\fscx110\\fscy110}' + text + '{\\c' + WHITE + '\\fscx100\\fscy100}')
         else:
-            # Inactive: white + normal scale (reset tags to be safe)
             parts.append('{\\c' + WHITE + '\\fscx100\\fscy100}' + text)
     return ' '.join(parts)
 
@@ -77,12 +74,26 @@ def main():
     chunks = chunk_words(words, args.chunk_size)
     events = []
 
-    for chunk in chunks:
+    for chunk_idx, chunk in enumerate(chunks):
         for active_idx in range(len(chunk)):
             word = chunk[active_idx]
+            start = word['start']
+
+            # Gapless: extend event to the next word's start time.
+            # This ensures subtitles never disappear between words or chunks.
+            if active_idx < len(chunk) - 1:
+                # Next word in same chunk
+                end = chunk[active_idx + 1]['start']
+            elif chunk_idx < len(chunks) - 1:
+                # Last word of chunk — extend to first word of next chunk
+                end = chunks[chunk_idx + 1][0]['start']
+            else:
+                # Very last word in entire script
+                end = word['end']
+
             text = build_karaoke_line(chunk, active_idx)
             events.append(
-                'Dialogue: 0,' + format_time(word['start']) + ',' + format_time(word['end']) + ',Default,,0,0,0,,' + text
+                'Dialogue: 0,' + format_time(start) + ',' + format_time(end) + ',Default,,0,0,0,,' + text
             )
 
     with open(args.output, 'w') as f:
