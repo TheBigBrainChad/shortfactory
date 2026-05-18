@@ -51,6 +51,7 @@ export default function StudioPage() {
   const [scriptVariants, setScriptVariants] = useState([]);
   const [showVariants, setShowVariants] = useState(false);
   const [captionStyle, setCaptionStyle] = useState('boxed');
+  const [sceneMatching, setSceneMatching] = useState(false);
 
   useEffect(() => {
     loadTopics();
@@ -225,7 +226,8 @@ export default function StudioPage() {
           description: description,
           tags: tags.join(','),
           background_video: selectedBackground || '',
-          caption_style: captionStyle
+          caption_style: captionStyle,
+          scene_matching: sceneMatching
         })
       });
 
@@ -541,6 +543,42 @@ export default function StudioPage() {
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: 2 }}>{s.desc}</div>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <h3 style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>Background Mode</h3>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div
+                  onClick={() => setSceneMatching(false)}
+                  style={{
+                    flex: 1,
+                    background: !sceneMatching ? 'rgba(0,240,255,0.08)' : 'var(--bg-surface-2)',
+                    border: !sceneMatching ? '2px solid var(--cyan)' : '1px solid var(--border)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '12px 14px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <div style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--text-primary)' }}>Single Clip</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: 2 }}>One background video (gameplay or selected clip)</div>
+                </div>
+                <div
+                  onClick={() => setSceneMatching(true)}
+                  style={{
+                    flex: 1,
+                    background: sceneMatching ? 'rgba(0,240,255,0.08)' : 'var(--bg-surface-2)',
+                    border: sceneMatching ? '2px solid var(--cyan)' : '1px solid var(--border)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '12px 14px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <div style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--text-primary)' }}>Smart Scenes</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: 2 }}>AI finds matching clips for each part of the script</div>
+                </div>
               </div>
             </div>
 

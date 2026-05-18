@@ -35,6 +35,10 @@ export async function POST(request) {
       if (body.caption_style) {
         updateVideo(videoId, { caption_style: body.caption_style });
       }
+
+      if (body.scene_matching !== undefined) {
+        updateVideo(videoId, { scene_matching: body.scene_matching ? 1 : 0 });
+      }
     }
 
     const runId = startPipeline(videoId, body.mode || 'manual');

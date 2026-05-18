@@ -12,6 +12,7 @@ const ENV_DEFAULTS = {
   default_voice: process.env.DEFAULT_VOICE || 'en-US-GuyNeural',
   auto_schedule_enabled: process.env.AUTO_SCHEDULE_ENABLED || 'false',
   auto_schedule_cron: process.env.AUTO_SCHEDULE_CRON || '0 10 * * *',
+  auto_scene_matching: process.env.AUTO_SCENE_MATCHING || 'false',
   gameplay_dir: process.env.GAMEPLAY_DIR || './media/gameplay',
   discord_webhook_url: process.env.DISCORD_WEBHOOK_URL || '',
   youtube_client_id: process.env.YOUTUBE_CLIENT_ID || '',
@@ -40,7 +41,7 @@ export async function PUT(request) {
     const allowedKeys = [
       'gemini_api_key', 'openai_api_key', 'brave_api_key',
       'ai_model', 'ai_image_model', 'default_voice',
-      'auto_schedule_enabled', 'auto_schedule_cron',
+      'auto_schedule_enabled', 'auto_schedule_cron', 'auto_scene_matching',
       'gameplay_dir', 'discord_webhook_url',
       'youtube_client_id', 'youtube_client_secret'
     ];

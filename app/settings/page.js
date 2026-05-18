@@ -125,6 +125,15 @@ export default function SettingsPage() {
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: 4, display: 'block' }}>Default: 0 10 * * * (daily at 10:00 UTC)</span>
           </div>
         </div>
+        <div className="settings-row">
+          <label>Auto Scene Matching</label>
+          <div className="field">
+            <div className="toggle-wrap">
+              <input type="checkbox" className="toggle" checked={settings.auto_scene_matching === 'true'} onChange={(e) => update('auto_scene_matching', e.target.checked ? 'true' : 'false')} />
+              <span className="toggle-label">{settings.auto_scene_matching === 'true' ? 'AI finds matching clips per scene' : 'Single background clip'}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="settings-section card">
