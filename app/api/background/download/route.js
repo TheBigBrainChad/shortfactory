@@ -32,6 +32,7 @@ export async function POST(request) {
       '--no-warnings',
       '--no-check-certificates',
       '--js-runtimes', 'node',
+      '--remote-components', 'ejs:github',
       '-f', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]',
       '--merge-output-format', 'mp4',
       '-o', outputTemplate,
@@ -46,7 +47,7 @@ export async function POST(request) {
 
     await new Promise((resolve, reject) => {
       const proc = spawn(YT_DLP, args, {
-        env: { ...process.env, PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`, YTDLP_JS_RUNTIMES: 'node' },
+        env: { ...process.env, PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`, YTDLP_JS_RUNTIMES: 'node', YTDLP_REMOTE_COMPONENTS: 'ejs:github' },
         stdio: ['pipe', 'pipe', 'pipe']
       });
 

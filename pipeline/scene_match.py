@@ -51,6 +51,7 @@ def get_render_env():
         paths.append(existing)
     env['LD_LIBRARY_PATH'] = ':'.join(paths)
     env['YTDLP_JS_RUNTIMES'] = 'node'
+    env['YTDLP_REMOTE_COMPONENTS'] = 'ejs:github'
     return env
 
 
@@ -81,6 +82,7 @@ def download_clip(video_id, output_path):
         yt_dlp,
         '--no-playlist',
         '--js-runtimes', 'node',
+        '--remote-components', 'ejs:github',
         '-f', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]',
         '--merge-output-format', 'mp4',
         '--max-filesize', '300M',
