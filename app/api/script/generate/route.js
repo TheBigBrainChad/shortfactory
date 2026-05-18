@@ -1,14 +1,19 @@
 import { NextResponse } from 'next/server';
 import { authenticate } from '../../../../lib/auth.js';
-import { generateScript, generateTitleDescription } from '../../../../lib/ai.js';
+import { generateScript, generateScriptVariants, generateTitleDescription } from '../../../../lib/ai.js';
 
 export async function POST(request) {
   const user = authenticate(request);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { topic, hook } = await request.json();
+    const { topic, hook, variants } = await request.json();
     if (!topic) return NextResponse.json({ error: 'Topic required' }, { status: 400 });
+
+    if (variants) {
+      const items = await generateScriptVariants(topic, hook);
+      return NextResponse.json({ variants: items });
+    }
 
     const script = await generateScript(topic, hook);
 

@@ -1507,3 +1507,19 @@ button:focus-visible {
 .voice-preview-btn:hover {
   color: var(--cyan) !important;
 }
+
+.variant-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.variant-card:hover {
+  border-color: var(--cyan) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0, 240, 255, 0.08);
+}
+
+.variant-card:active {
+  transform: translateY(0);
+}

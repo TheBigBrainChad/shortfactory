@@ -48,6 +48,10 @@ export default function StudioPage() {
   const [localBackgrounds, setLocalBackgrounds] = useState([]);
   const [bgTab, setBgTab] = useState('search');
 
+  const [scriptVariants, setScriptVariants] = useState([]);
+  const [showVariants, setShowVariants] = useState(false);
+  const [captionStyle, setCaptionStyle] = useState('boxed');
+
   useEffect(() => {
     loadTopics();
     loadLocalBackgrounds();
@@ -102,17 +106,14 @@ export default function StudioPage() {
       const res = await fetch('/api/script/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: topic.title, hook: topic.hook })
+        body: JSON.stringify({ topic: topic.title, hook: topic.hook, variants: true })
       });
       if (res.ok) {
         const data = await res.json();
-        setScript(data.script || '');
-        setTitle(data.title || topic.title);
-        setDescription(data.description || '');
-        setTags(data.tags || []);
-        setStep(1);
+        setScriptVariants(data.variants || []);
+        setShowVariants(true);
       } else {
-        showToast('error', 'Failed to generate script');
+        showToast('error', 'Failed to generate variants');
       }
     } catch {
       showToast('error', 'Connection error');
@@ -127,15 +128,40 @@ export default function StudioPage() {
       const res = await fetch('/api/script/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: customTopic })
+        body: JSON.stringify({ topic: customTopic, variants: true })
       });
       if (res.ok) {
         const data = await res.json();
-        setScript(data.script || '');
-        setTitle(data.title || customTopic);
+        setScriptVariants(data.variants || []);
+        setShowVariants(true);
+      }
+    } catch {
+      showToast('error', 'Connection error');
+    }
+    setLoading(false);
+  }
+
+  async function selectVariant(variant) {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/script/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: selectedTopic?.title || customTopic,
+          script: variant.script
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setScript(variant.script);
+        setTitle(data.title || selectedTopic?.title || customTopic);
         setDescription(data.description || '');
         setTags(data.tags || []);
+        setShowVariants(false);
         setStep(1);
+      } else {
+        showToast('error', 'Failed to generate metadata');
       }
     } catch {
       showToast('error', 'Connection error');
@@ -198,7 +224,8 @@ export default function StudioPage() {
           voice: voice,
           description: description,
           tags: tags.join(','),
-          background_video: selectedBackground || ''
+          background_video: selectedBackground || '',
+          caption_style: captionStyle
         })
       });
 
@@ -326,38 +353,124 @@ export default function StudioPage() {
       <div className="card" style={{ marginTop: 24 }}>
         {step === 0 && (
           <div>
-            <h2 className="section-title">Choose a Topic</h2>
-            <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-              <button className="btn btn-secondary" onClick={generateNewTopics} disabled={loading}>
-                {loading ? 'Loading...' : '🔄 Generate New Topics'}
-              </button>
-            </div>
+            {showVariants ? (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                  <h2 className="section-title" style={{ marginBottom: 0 }}>Pick a Script</h2>
+                  <button className="btn btn-ghost" onClick={() => { setShowVariants(false); setScriptVariants([]); }} style={{ fontSize: '0.84rem' }}>
+                    ← Back to topics
+                  </button>
+                </div>
 
-            {topics.length > 0 ? (
-              <TopicGrid topics={topics} selectedId={selectedTopic?.id} onSelect={handleTopicSelect} />
+                {scriptVariants.length > 0 ? (
+                  <div className="variant-grid">
+                    {scriptVariants.map((variant) => (
+                      <div
+                        key={variant.label}
+                        className="variant-card"
+                        style={{
+                          background: 'var(--bg-surface-2)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-md)',
+                          padding: 16,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 10,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          borderLeft: `3px solid ${variant.label === 'A' ? 'var(--cyan)' : variant.label === 'B' ? 'var(--amber)' : 'var(--purple)'}`,
+                        }}
+                        onClick={() => selectVariant(variant)}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{
+                              fontFamily: 'var(--font-display)',
+                              fontSize: '1.2rem',
+                              fontWeight: 700,
+                              color: variant.label === 'A' ? 'var(--cyan)' : variant.label === 'B' ? 'var(--amber)' : 'var(--purple)'
+                            }}>{variant.label}</span>
+                            <span style={{
+                              fontSize: '0.72rem',
+                              fontFamily: 'var(--font-mono)',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.08em',
+                              color: 'var(--text-tertiary)',
+                              background: 'var(--bg-surface-3)',
+                              padding: '2px 8px',
+                              borderRadius: 'var(--radius-sm)'
+                            }}>{variant.angle}</span>
+                          </div>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
+                            {(variant.script || '').trim().split(/\s+/).filter(Boolean).length} words
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.4 }}>
+                          "{variant.hook}"
+                        </div>
+
+                        <div style={{
+                          fontSize: '0.82rem',
+                          color: 'var(--text-secondary)',
+                          lineHeight: 1.5,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 4,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          fontFamily: 'var(--font-body)'
+                        }}>
+                          {(variant.script || '').split('\n').filter(l => l.trim()).slice(0, 3).join(' ').substring(0, 180)}...
+                        </div>
+
+                        <button className="btn btn-primary" style={{ marginTop: 4, width: '100%', justifyContent: 'center' }}>
+                          Select Variant {variant.label}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-tertiary)' }}>
+                    No variants generated. Go back and try again.
+                  </div>
+                )}
+              </div>
             ) : (
-              <div className="empty-state">
-                <div className="empty-icon">💡</div>
-                <h3>No topics yet</h3>
-                <p>Click "Generate New Topics" to get AI suggestions</p>
+              <div>
+                <h2 className="section-title">Choose a Topic</h2>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+                  <button className="btn btn-secondary" onClick={generateNewTopics} disabled={loading}>
+                    {loading ? 'Loading...' : '🔄 Generate New Topics'}
+                  </button>
+                </div>
+
+                {topics.length > 0 ? (
+                  <TopicGrid topics={topics} selectedId={selectedTopic?.id} onSelect={handleTopicSelect} />
+                ) : (
+                  <div className="empty-state">
+                    <div className="empty-icon">💡</div>
+                    <h3>No topics yet</h3>
+                    <p>Click "Generate New Topics" to get AI suggestions</p>
+                  </div>
+                )}
+
+                <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--border)' }}>
+                  <h3 className="section-title">Or enter a custom topic</h3>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <input
+                      type="text"
+                      value={customTopic}
+                      onChange={(e) => setCustomTopic(e.target.value)}
+                      placeholder="e.g., Why octopuses have three hearts"
+                      style={{ flex: 1 }}
+                    />
+                    <button className="btn btn-primary" onClick={handleCustomTopic} disabled={!customTopic.trim() || loading}>
+                      Generate Variants →
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
-
-            <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--border)' }}>
-              <h3 className="section-title">Or enter a custom topic</h3>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <input
-                  type="text"
-                  value={customTopic}
-                  onChange={(e) => setCustomTopic(e.target.value)}
-                  placeholder="e.g., Why octopuses have three hearts"
-                  style={{ flex: 1 }}
-                />
-                <button className="btn btn-primary" onClick={handleCustomTopic} disabled={!customTopic.trim() || loading}>
-                  Generate Script →
-                </button>
-              </div>
-            </div>
           </div>
         )}
 
@@ -401,6 +514,34 @@ export default function StudioPage() {
             <div style={{ marginBottom: 24 }}>
               <h3 style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>Voice</h3>
               <VoicePicker selected={voice} onSelect={setVoice} />
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <h3 style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>Caption Style</h3>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {[
+                  { key: 'boxed', label: 'Boxed', desc: 'Opaque background box' },
+                  { key: 'outline', label: 'Outline', desc: 'Clean stroke only' },
+                  { key: 'neon', label: 'Neon', desc: 'Cyan glow effect' },
+                ].map((s) => (
+                  <div
+                    key={s.key}
+                    onClick={() => setCaptionStyle(s.key)}
+                    style={{
+                      flex: 1,
+                      background: captionStyle === s.key ? 'rgba(0,240,255,0.08)' : 'var(--bg-surface-2)',
+                      border: captionStyle === s.key ? '2px solid var(--cyan)' : '1px solid var(--border)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '12px 14px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <div style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--text-primary)' }}>{s.label}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: 2 }}>{s.desc}</div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div style={{ marginBottom: 24 }}>
@@ -652,7 +793,7 @@ export default function StudioPage() {
                         </button>
                       </a>
                     )}
-                    <button className="btn btn-ghost" onClick={() => { setStep(0); setSelectedTopic(null); setScript(''); setTitle(''); }} style={{ justifyContent: 'center' }}>
+                    <button className="btn btn-ghost" onClick={() => { setStep(0); setSelectedTopic(null); setScript(''); setTitle(''); setScriptVariants([]); setShowVariants(false); }} style={{ justifyContent: 'center' }}>
                       ✨ Create Another
                     </button>
                     <button className="btn btn-ghost" onClick={retryPipeline} style={{ justifyContent: 'center' }}>

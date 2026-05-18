@@ -31,6 +31,10 @@ export async function POST(request) {
       if (body.background_video) {
         updateVideo(videoId, { background_video: body.background_video });
       }
+
+      if (body.caption_style) {
+        updateVideo(videoId, { caption_style: body.caption_style });
+      }
     }
 
     const runId = startPipeline(videoId, body.mode || 'manual');
