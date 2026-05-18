@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """ShortFactory — Karaoke Subtitle Generator
-Creates ASS format subtitles with word-by-word highlighting."""
+Word-by-word karaoke: active word pops yellow + 110%, rest stay white.
+Font: Montserrat 56pt bold, centered at 45% from top of 1080x1920."""
 
 import argparse
 import json
 
 
-STYLE_PRESETS = {
-    'boxed': {
-        'header': """[Script Info]
+ASS_HEADER = """[Script Info]
 Title: ShortFactory Subtitles
 ScriptType: v4.00+
 PlayResX: 1080
@@ -18,62 +17,18 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Active,DejaVu Sans,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,3,4,0,2,40,40,120,1
-Style: Inactive,DejaVu Sans,64,&H80FFFFFF,&H80FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,3,4,0,2,40,40,120,1
+Style: Default,Montserrat,56,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,5,40,40,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-""",
-        'active_highlight': '&H00FFE1FF&',
-        'active_normal': '&H00FFFFFF&',
-        'inactive_color': '&H808080&',
-        'blur': False,
-    },
-    'outline': {
-        'header': """[Script Info]
-Title: ShortFactory Subtitles
-ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
-WrapStyle: 0
-ScaledBorderAndShadow: yes
+"""
 
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Active,DejaVu Sans,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,3,1,2,40,40,120,1
-Style: Inactive,DejaVu Sans,64,&H80FFFFFF,&H80FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,1,2,40,40,120,1
+# Colors in ASS BGR format
+YELLOW = '&H0000FFFF&'
+WHITE = '&H00FFFFFF&'
 
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-""",
-        'active_highlight': '&H00FFE1FF&',
-        'active_normal': '&H00FFFFFF&',
-        'inactive_color': '&H808080&',
-        'blur': False,
-    },
-    'neon': {
-        'header': """[Script Info]
-Title: ShortFactory Subtitles
-ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
-WrapStyle: 0
-ScaledBorderAndShadow: yes
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Active,DejaVu Sans,64,&H00FFE1FF,&H00FFE1FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,4,2,2,40,40,120,1
-Style: Inactive,DejaVu Sans,64,&H50FFE1FF,&H50FFE1FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,3,1,2,40,40,120,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-""",
-        'active_highlight': '&H00FFFFFF&',
-        'active_normal': '&H00FFE1FF&',
-        'inactive_color': '&H50FFE1FF&',
-        'blur': True,
-    },
-}
+# Position: center horizontally (540), 45% from top (864)
+POS_TAG = '\\an5\\pos(540,864)'
 
 
 def format_time(seconds):
@@ -85,35 +40,21 @@ def format_time(seconds):
 
 
 def chunk_words(words, chunk_size=4):
-    chunks = []
-    for i in range(0, len(words), chunk_size):
-        chunks.append(words[i:i + chunk_size])
-    return chunks
+    """Split words into chunks of `chunk_size`."""
+    return [words[i:i + chunk_size] for i in range(0, len(words), chunk_size)]
 
 
-def build_highlight_text(chunk, highlight_word, active_hl, active_norm, blur):
-    """Build ASS text with word-by-word highlighting. Avoid f-strings with braces."""
-    parts = []
-    for w in chunk:
-        word_text = w['word']
-        if w == highlight_word:
-            # Highlighted word: {\c&H00FFE1FF&}{\blur3}word{\c&H00FFFFFF&}{\blur3}
-            tag_open = '\\c' + active_hl
-            tag_close = '\\c' + active_norm
-            if blur:
-                tag_open += '\\blur3'
-                tag_close += '\\blur3'
-            parts.append('{' + tag_open + '}' + word_text + '{' + tag_close + '}')
+def build_karaoke_line(chunk, active_index):
+    """Build one Dialogue text line where the active word is yellow+scaled."""
+    parts = [POS_TAG]
+    for idx, word in enumerate(chunk):
+        text = word['word']
+        if idx == active_index:
+            # Active: yellow + 110% scale
+            parts.append('{\\c' + YELLOW + '\\fscx110\\fscy110}' + text + '{\\c' + WHITE + '\\fscx100\\fscy100}')
         else:
-            parts.append(word_text)
-    return ' '.join(parts)
-
-
-def build_inactive_text(chunk, inactive_color):
-    """Build ASS text for inactive subtitle line."""
-    parts = []
-    for w in chunk:
-        parts.append('{\\c' + inactive_color + '}' + w['word'])
+            # Inactive: white + normal scale (reset tags to be safe)
+            parts.append('{\\c' + WHITE + '\\fscx100\\fscy100}' + text)
     return ' '.join(parts)
 
 
@@ -122,10 +63,7 @@ def main():
     parser.add_argument('--transcript', required=True, help='Transcript JSON file')
     parser.add_argument('--output', required=True, help='Output ASS file')
     parser.add_argument('--chunk-size', type=int, default=4, help='Words per subtitle line')
-    parser.add_argument('--style', default='boxed', choices=list(STYLE_PRESETS.keys()), help='Caption style preset')
     args = parser.parse_args()
-
-    style = STYLE_PRESETS.get(args.style, STYLE_PRESETS['boxed'])
 
     with open(args.transcript) as f:
         transcript = json.load(f)
@@ -134,35 +72,21 @@ def main():
     if not words:
         raise ValueError('No words found in transcript')
 
-    print('✨ Generating subtitles (' + args.style + ' style): ' + str(len(words)) + ' words...', flush=True)
+    print('✨ Generating karaoke subtitles: ' + str(len(words)) + ' words...', flush=True)
 
     chunks = chunk_words(words, args.chunk_size)
     events = []
 
     for chunk in chunks:
-        chunk_start = chunk[0]['start']
-        chunk_end = chunk[-1]['end']
-
-        for word in chunk:
-            word_start = word['start']
-            word_end = word['end']
-            highlight_text = build_highlight_text(
-                chunk, word,
-                style['active_highlight'],
-                style['active_normal'],
-                style['blur']
-            )
+        for active_idx in range(len(chunk)):
+            word = chunk[active_idx]
+            text = build_karaoke_line(chunk, active_idx)
             events.append(
-                'Dialogue: 0,' + format_time(word_start) + ',' + format_time(word_end) + ',Active,,0,0,0,,' + highlight_text
+                'Dialogue: 0,' + format_time(word['start']) + ',' + format_time(word['end']) + ',Default,,0,0,0,,' + text
             )
-
-        inactive_text = build_inactive_text(chunk, style['inactive_color'])
-        events.append(
-            'Dialogue: 0,' + format_time(chunk_start) + ',' + format_time(chunk_end) + ',Inactive,,0,0,0,,' + inactive_text
-        )
 
     with open(args.output, 'w') as f:
-        f.write(style['header'])
+        f.write(ASS_HEADER)
         for event in events:
             f.write(event + '\n')
 

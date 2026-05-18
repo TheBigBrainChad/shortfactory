@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """ShortFactory — Smart Scene Matching
-Downloads multiple background clips matching script segments, trims them,
-and concatenates with crossfades into a single seamless background video."""
+Downloads background clips matching AI-provided script segments, trims them,
+and concatenates into a single seamless background video.
+
+Segments come from AI (generateSceneSegments) with start/end times and queries."""
 
 import argparse
 import json
@@ -114,7 +116,7 @@ def trim_clip(input_path, output_path, duration, start_offset=0):
         '-c:a', 'aac', '-b:a', '128k',
         '-vf', 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920',
         '-r', '30', '-pix_fmt', 'yuv420p',
-        '-an',  # No audio, we'll use voiceover separately
+        '-an',  # No audio, voiceover is separate
         output_path
     ]
 
@@ -126,8 +128,8 @@ def trim_clip(input_path, output_path, duration, start_offset=0):
         return False
 
 
-def concatenate_clips(clip_paths, output_path, crossfade=0.5):
-    """Concatenate clips with crossfade transitions using FFmpeg."""
+def concatenate_clips(clip_paths, output_path):
+    """Concatenate clips using FFmpeg concat demuxer."""
     ffmpeg = find_ffmpeg()
     if len(clip_paths) == 0:
         return False
@@ -135,14 +137,7 @@ def concatenate_clips(clip_paths, output_path, crossfade=0.5):
         shutil.copy2(clip_paths[0], output_path)
         return True
 
-    # Use the concat demuxer with re-encoding for smooth crossfades
-    # For simplicity with many clips, we'll do a direct concat with fade
     tmp_dir = os.path.dirname(output_path)
-
-    # Build a complex filtergraph for crossfading
-    # This gets complex with many inputs, so we'll use a simpler approach:
-    # Concatenate all clips first, then apply a global fade filter
-
     list_file = os.path.join(tmp_dir, 'concat_list.txt')
     with open(list_file, 'w') as f:
         for p in clip_paths:
@@ -164,29 +159,6 @@ def concatenate_clips(clip_paths, output_path, crossfade=0.5):
     except Exception as e:
         print(f'   Concat error: {e}', flush=True)
         return False
-
-
-def segment_transcript(words, max_words_per_segment=8):
-    """Group words into segments for scene matching."""
-    segments = []
-    if not words:
-        return segments
-
-    for i in range(0, len(words), max_words_per_segment):
-        chunk = words[i:i + max_words_per_segment]
-        segments.append({
-            'start': chunk[0]['start'],
-            'end': chunk[-1]['end'],
-            'text': ' '.join(w['word'] for w in chunk),
-            'words': chunk
-        })
-
-    return segments
-
-
-def load_queries(queries_file):
-    with open(queries_file) as f:
-        return json.load(f)
 
 
 def search_youtube(query, brave_key):
@@ -219,73 +191,67 @@ def search_youtube(query, brave_key):
         return []
 
 
+def process_segment(segment, brave_key, tmp_dir, index):
+    """Search, download and trim a single segment. Returns trimmed path or None."""
+    duration = segment['end'] - segment['start']
+    if duration < 0.3:
+        print(f'   Segment {index} too short ({duration:.1f}s), skipping', flush=True)
+        return None
+
+    query = segment['query']
+    print(f'[{index+1}] "{query}" ({duration:.1f}s)', flush=True)
+
+    results = search_youtube(query, brave_key)
+    if not results:
+        print(f'   No results for "{query}", trying broader search...', flush=True)
+        results = search_youtube(query + ' footage', brave_key)
+
+    if not results:
+        print(f'   No clips found for segment {index}', flush=True)
+        return None
+
+    # Try results in order until one downloads successfully
+    for result in results:
+        video_id = result['videoId']
+        raw_path = os.path.join(tmp_dir, f'seg_{index:03d}_{video_id}.mp4')
+        trimmed_path = os.path.join(tmp_dir, f'seg_{index:03d}_trimmed.mp4')
+
+        if download_clip(video_id, raw_path):
+            if trim_clip(raw_path, trimmed_path, duration):
+                return trimmed_path
+            else:
+                print(f'   Trim failed for {video_id}, trying next result', flush=True)
+        else:
+            print(f'   Download failed for {video_id}, trying next result', flush=True)
+
+    print(f'   All results failed for segment {index}', flush=True)
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description='Smart scene matching for background clips')
-    parser.add_argument('--transcript', required=True, help='Transcript JSON file')
-    parser.add_argument('--queries', required=True, help='Queries JSON file')
+    parser.add_argument('--segments', required=True, help='Segments JSON file with start/end/query')
     parser.add_argument('--output', required=True, help='Output concatenated video')
     parser.add_argument('--brave-key', required=True, help='Brave Search API key')
-    parser.add_argument('--max-words', type=int, default=8, help='Words per segment')
     args = parser.parse_args()
 
-    with open(args.transcript) as f:
-        transcript = json.load(f)
+    with open(args.segments) as f:
+        segments = json.load(f)
 
-    queries = load_queries(args.queries)
-    words = transcript.get('words', [])
-    segments = segment_transcript(words, args.max_words)
-
-    print(f'🎬 Scene matching: {len(segments)} segments, {len(words)} words...', flush=True)
-
-    if len(segments) != len(queries):
-        print(f'⚠️ Segment/query mismatch: {len(segments)} segments vs {len(queries)} queries', flush=True)
+    print(f'🎬 Scene matching: {len(segments)} AI-generated segments...', flush=True)
 
     tmp_dir = tempfile.mkdtemp(prefix='sf-scenes-')
     clip_paths = []
-    gameplay_dir = os.environ.get('GAMEPLAY_DIR', './media/gameplay')
 
-    for i, (segment, query) in enumerate(zip(segments, queries)):
-        duration = segment['end'] - segment['start']
-        if duration < 0.5:
-            continue
-
-        print(f'[{i+1}/{len(segments)}] "{segment["text"][:40]}..." → "{query}"', flush=True)
-
-        results = search_youtube(query, args.brave_key)
-        if not results:
-            print(f'   No results, trying generic fallback...', flush=True)
-            results = search_youtube(query.split()[-1] + ' footage', args.brave_key)
-
-        if not results:
-            print(f'   Skipping segment (no clips found)', flush=True)
-            continue
-
-        # Pick first result (or random if multiple)
-        video_id = results[0]['videoId']
-        raw_path = os.path.join(tmp_dir, f'seg_{i:03d}_{video_id}.mp4')
-        trimmed_path = os.path.join(tmp_dir, f'seg_{i:03d}_trimmed.mp4')
-
-        if not download_clip(video_id, raw_path):
-            print(f'   Download failed, skipping', flush=True)
-            continue
-
-        if not trim_clip(raw_path, trimmed_path, duration):
-            print(f'   Trim failed, using raw', flush=True)
-            trimmed_path = raw_path
-
-        clip_paths.append(trimmed_path)
+    for i, segment in enumerate(segments):
+        trimmed = process_segment(segment, args.brave_key, tmp_dir, i)
+        if trimmed:
+            clip_paths.append(trimmed)
 
     if not clip_paths:
-        print('❌ No clips could be downloaded. Falling back to random gameplay.', flush=True)
-        # Copy a random gameplay clip as fallback
-        if os.path.isdir(gameplay_dir):
-            clips = [f for f in os.listdir(gameplay_dir) if f.lower().endswith(('.mp4', '.mkv', '.mov'))]
-            if clips:
-                fallback = os.path.join(gameplay_dir, random.choice(clips))
-                shutil.copy2(fallback, args.output)
-                print(f'✅ Fallback background: {args.output}', flush=True)
-                sys.exit(0)
-        print('❌ No fallback available either.', flush=True)
+        print('❌ No clips could be downloaded for any segment.', flush=True)
+        # Clean up temp dir
+        shutil.rmtree(tmp_dir, ignore_errors=True)
         sys.exit(1)
 
     print(f'🎞 Concatenating {len(clip_paths)} clips...', flush=True)
